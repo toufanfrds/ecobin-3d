@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Simulasi 3D ECOBIN - Tempat Sampah Pintar Berbasis Arduino</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js r128 UMD Stabil dengan Fallback Otomatis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onerror="loadThreeFallback()"></script>
+    <script>
+        function loadThreeFallback() {
+            if (window.THREE) return;
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';
+            document.head.appendChild(s);
+        }
+    </script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        html, body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0f172a;
+            color: #f8fafc;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .font-mono-tech {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Latar Studio Terang 100% Bersih Tanpa Teks/Tombol Overlay */
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            min-height: 240px;
+            background: radial-gradient(circle at 50% 44%, #ffffff 0%, #e2e8f0 68%, #cbd5e1 100%);
+            overflow: hidden;
+            touch-action: none;
+        }
+        #canvas-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Scrollbar Halus untuk Panel Kontrol */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.7);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.85);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(16, 185, 129, 0.85);
+        }
+        /* Tampilan Layar LCD Karakter 16x2 Digital Twin */
+        .lcd-bezel {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.85), 0 1px 2px rgba(255, 255, 255, 0.08);
+        }
+        .lcd-screen-active {
+            background: linear-gradient(180deg, #5eead4 0%, #34d399 100%);
+            color: #042f2e;
+            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+            box-shadow: inset 0 0 14px rgba(6, 78, 59, 0.35), 0 0 16px rgba(52, 211, 153, 0.45);
+        }
+        .lcd-screen-standby {
+            background-color: #132220;
+            color: #4d7c74;
+            box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.8);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col lg:flex-row overflow-hidden">
+
+    <!-- AREA VIEWPORT 3D (ATAS DI HP / KIRI DI DESKTOP) - 100% BERSIH TANPA OVERLAY -->
+    <div class="relative w-full lg:flex-1 h-[46vh] lg:h-full shrink-0 flex flex-col">
+        <div id="canvas-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+    </div>
+
+    <!-- PANEL KONTROL TERPISAH (BAWAH DI HP / KANAN DI DESKTOP) -->
+    <aside class="w-full lg:w-[415px] xl:w-[440px] flex-1 lg:flex-none lg:h-full bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col z-20 overflow-y-auto shadow-2xl">
+
+        <!-- Header Panel Kontrol: Identitas Proyek, Status & Utilitas -->
+        <div class="p-3.5 border-b border-slate-800 bg-slate-950/95 sticky top-0 z-10 backdrop-blur space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                        <i class="fa-solid fa-recycle text-sm"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <h1 class="font-extrabold tracking-tight text-white text-sm">ECO<span class="text-emerald-400">BIN</span> 3D</h1>
+                            <span id="header-pulse-dot" class="w-2 h-2 rounded-full bg-slate-500 transition-colors"></span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">Tempat Sampah Pintar Berbasis Arduino</p>
+                    </div>
+                </div>
+                <span id="system-state-badge" class="text-[11px] font-mono-tech px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-semibold shrink-0">
+                    TERTUTUP
+                </span>
+            </div>
+
+            <!-- Tombol Alat Bantu: X-Ray Kotak, Kode Arduino & Suara -->
+            <div class="flex items-center gap-1.5 pt-0.5">
+                <button id="btn-toggle-xray" onclick="toggleXRay()" class="flex-1 px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-eye text-amber-400"></i>
+                    <span>X-Ray Kotak</span>
+                </button>
+
+                <button onclick="openCodeModal()" class="flex-1 px-2.5 py-2 rounded-lg text-xs font-semibold bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/40 transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-code text-sky-400"></i>
+                    <span>Kode Arduino</span>
+                </button>
+
+                <button id="btn-toggle-sound" onclick="toggleSound()" class="px-3 py-2 rounded-lg text-xs font-medium bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/50 transition" title="Efek Suara">
+                    <i id="icon-sound" class="fa-solid fa-volume-high"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="p-3.5 space-y-3.5 flex-1">
+
+            <!-- 1. SUDUT PANDANG KAMERA 3D -->
+            <div class="bg-slate-800/65 border border-slate-700/80 rounded-xl p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-video text-emerald-400"></i> Sudut Pandang Kamera
+                    </span>
+                    <span class="text-[10px] text-slate-400">Geser 1 Jari / Cubit 2 Jari</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button onclick="setCameraView('perspective')" id="cam-perspective" class="cam-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white transition">Perspektif</button>
+                    <button onclick="setCameraView('front')" id="cam-front" class="cam-btn px-2.5 py-2 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition">Tampak Depan</button>
+                    <button onclick="setCameraView('servo')" id="cam-servo" class="cam-btn px-2.5 py-2 rounded-lg text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition">
+                        <i class="fa-solid fa-gears mr-1"></i>Detail Tuas Servo
+                    </button>
+                    <button onclick="setCameraView('top')" id="cam-top" class="cam-btn px-2.5 py-2 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition">Tampak Atas</button>
+                </div>
+            </div>
+
+            <!-- 2. AKTIVASI SENSOR DEPAN & TIMER TUTUP OTOMATIS -->
+            <div class="bg-slate-800/65 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-hand-pointer"></i> Aktivasi Sensor Depan
+                    </span>
+                    <label class="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer">
+                        <input id="chk-auto-close" type="checkbox" checked class="accent-emerald-500 rounded cursor-pointer">
+                        <span>Tutup Otomatis (4d)</span>
+                    </label>
+                </div>
+
+                <!-- Tombol Utama Sensor -->
+                <button id="btn-trigger-sensor" onclick="toggleFrontSensor()" class="w-full rounded-xl py-3.5 px-4 font-bold text-sm flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg border border-emerald-400/40 transition active:scale-[0.98]">
+                    <i class="fa-solid fa-fingerprint text-base"></i>
+                    <span>Tekan Sensor Depan</span>
+                </button>
+
+                <!-- Bilah Kemajuan Timer Tutup Otomatis -->
+                <div id="auto-close-bar-wrapper" class="hidden space-y-1">
+                    <div class="flex justify-between text-[11px] font-mono-tech text-emerald-300">
+                        <span>Timer Tutup Otomatis</span>
+                        <span id="auto-close-countdown">4.0 d</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-700/70">
+                        <div id="auto-close-progress" class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-all duration-75" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Tombol Simulasi Membuang Sampah -->
+                <button onclick="simulateThrowTrash()" class="w-full py-2.5 px-3 rounded-xl bg-sky-600/25 hover:bg-sky-600/40 border border-sky-500/40 text-xs font-semibold text-sky-200 flex items-center justify-center gap-2 transition active:scale-[0.98]">
+                    <i class="fa-solid fa-trash-arrow-up text-sky-400"></i>
+                    <span>Simulasi Buang Sampah</span>
+                </button>
+            </div>
+
+            <!-- 3. PEMILIH KATEGORI SAMPAH (ORGANIK / ANORGANIK) -->
+            <div class="bg-slate-800/65 border border-slate-700/80 rounded-xl p-3.5 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-tags"></i> Kategori Sampah (Teks LCD)
+                    </span>
+                    <span id="waste-badge" class="text-[10px] font-mono-tech px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">ORGANIK</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <button id="btn-mode-organik" onclick="setWasteCategory('ORGANIK')" class="py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 bg-emerald-600/30 border-emerald-400 text-emerald-200 shadow">
+                        <i class="fa-solid fa-apple-whole text-emerald-400"></i>
+                        <span>ORGANIK</span>
+                    </button>
+                    <button id="btn-mode-anorganik" onclick="setWasteCategory('ANORGANIK')" class="py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800">
+                        <i class="fa-solid fa-bottle-water text-sky-400"></i>
+                        <span>ANORGANIK</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. DIGITAL TWIN TELEMETRI (LCD 16x2, LED HIJAU & SUDUT SERVO) -->
+            <div class="bg-slate-800/65 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-microchip"></i> Digital Twin Telemetri
+                    </span>
+                    <span class="text-[10px] font-mono-tech text-slate-400">Arduino Uno / Nano</span>
+                </div>
+
+                <!-- Layar LCD Karakter 16x2 Live Mirror -->
+                <div class="lcd-bezel p-2.5 rounded-xl border border-slate-700">
+                    <div id="ui-lcd-screen" class="lcd-screen-standby rounded-lg p-3 font-mono-tech transition-all duration-300">
+                        <div id="lcd-line-1" class="text-sm sm:text-base font-bold tracking-[0.14em] leading-tight whitespace-pre overflow-hidden">ECOBIN READY    </div>
+                        <div id="lcd-line-2" class="text-sm sm:text-base font-bold tracking-[0.14em] leading-tight whitespace-pre overflow-hidden mt-1">TEKAN SENSOR    </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1.5 text-[10px] text-slate-400 font-mono-tech px-1">
+                        <span>Modul LCD 16x2 I2C (0x27)</span>
+                        <span id="lcd-backlight-label" class="text-slate-500 font-semibold">STANDBY</span>
+                    </div>
+                </div>
+
+                <!-- Baris Indikator LED Hijau & Sudut Motor Servo -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <!-- Status LED Hijau -->
+                    <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-2.5 flex flex-col justify-between">
+                        <span class="text-[10px] font-mono-tech uppercase text-slate-400">Indikator LED Depan</span>
+                        <div class="flex items-center gap-2 mt-1.5">
+                            <span id="ui-led-dot" class="w-3.5 h-3.5 rounded-full bg-emerald-950 border border-emerald-800 transition-all duration-300"></span>
+                            <span id="ui-led-text" class="text-xs font-mono-tech font-bold text-slate-500">MATI</span>
+                        </div>
+                    </div>
+
+                    <!-- Pembacaan & Kontrol Manual Sudut Servo -->
+                    <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-2.5 flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-mono-tech uppercase text-slate-400">Sudut Servo</span>
+                            <span id="servo-angle-readout" class="text-xs font-mono-tech font-bold text-emerald-400">0°</span>
+                        </div>
+                        <input id="servo-slider" type="range" min="0" max="80" value="0" oninput="onManualServoSlide(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg mt-2" title="Geser manual sudut motor servo (0° - 80°)">
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </aside>
+
+    <!-- MODAL KODE PROGRAM ARDUINO (.INO) -->
+    <div id="code-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+                <div class="flex items-center gap-2.5">
+                    <i class="fa-solid fa-file-code text-sky-400 text-lg"></i>
+                    <div>
+                        <h3 class="font-bold text-sm text-white">Kode Program Arduino: ECOBIN_SmartBin.ino</h3>
+                        <p class="text-[11px] text-slate-400">Sensor Sentuh/Proksimitas Depan (Pin 2), Servo (Pin 9), LED Hijau (Pin 13) &amp; LCD 16x2 I2C (0x27)</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="copyArduinoCode()" id="btn-copy-code" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>Salin Kode</span>
+                    </button>
+                    <button onclick="closeCodeModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-4 overflow-y-auto font-mono-tech text-xs text-slate-200 bg-slate-950/90 leading-relaxed select-text">
+<pre id="arduino-code-block" class="whitespace-pre-wrap">// ====================================================================
+// PROYEK TEKNIK: ECOBIN - TEMPAT SAMPAH PINTAR GALON BEKAS
+// Komponen:
+// - Sensor Sentuh / Proksimitas Depan (Digital Pin 2)
+// - Saklar Pemilih Kategori Sampah    (Digital Pin 4)
+// - Motor Servo Pembuka Tutup         (PWM Pin 9)
+// - Lampu Indikator LED Hijau Depan   (Digital Pin 13)
+// - Layar LCD Karakter 16x2 I2C       (Alamat 0x27, SDA A4, SCL A5)
+// ====================================================================
+
+#include &lt;Wire.h&gt;
+#include &lt;LiquidCrystal_I2C.h&gt;
+#include &lt;Servo.h&gt;
+
+// Inisialisasi LCD 16x2 I2C pada alamat 0x27
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+Servo servoTutup;
+
+// Definisi Pin Mikrokontroler Arduino Uno / Nano
+const int PIN_SENSOR    = 2;   // Sensor Sentuh / Proksimitas Depan
+const int PIN_SW_JENIS  = 4;   // Saklar Pilih Jenis (HIGH = Organik, LOW = Anorganik)
+const int PIN_SERVO     = 9;   // Motor Servo Penggerak Tuas Tutup
+const int PIN_LED_HIJAU = 13;  // Lampu Indikator LED Hijau di Depan Galon
+
+// Konstanta Sudut Buka &amp; Tutup Servo
+const int SUDUT_TUTUP = 0;
+const int SUDUT_BUKA  = 80;
+
+void setup() {
+  pinMode(PIN_SENSOR, INPUT_PULLUP);
+  pinMode(PIN_SW_JENIS, INPUT_PULLUP);
+  pinMode(PIN_LED_HIJAU, OUTPUT);
+
+  // Posisi awal tertutup &amp; LED mati
+  digitalWrite(PIN_LED_HIJAU, LOW);
+  servoTutup.attach(PIN_SERVO);
+  servoTutup.write(SUDUT_TUTUP);
+
+  // Inisialisasi tampilan awal LCD 16x2
+  lcd.init();
+  lcd.noBacklight();
+  tampilStandby();
+}
+
+void loop() {
+  // Baca status sensor depan (aktif LOW saat ditekan/tersentuh)
+  bool sensorAktif = (digitalRead(PIN_SENSOR) == LOW);
+  bool modeOrganik = (digitalRead(PIN_SW_JENIS) == HIGH);
+
+  if (sensorAktif) {
+    // 1. Nyalakan Lampu LED Hijau Depan &amp; Backlight LCD
+    digitalWrite(PIN_LED_HIJAU, HIGH);
+    lcd.backlight();
+
+    // 2. Tampilkan status terbuka dan kategori sampah pada LCD 16x2
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("STATUS: TERBUKA ");
+    lcd.setCursor(0, 1);
+    if (modeOrganik) {
+      lcd.print("JENIS: ORGANIK  ");
+    } else {
+      lcd.print("JENIS: ANORGANIK");
+    }
+
+    // 3. Gerakkan tuas motor servo untuk membuka tutup galon (80 derajat)
+    servoTutup.write(SUDUT_BUKA);
+    delay(4000); // Tahan tutup terbuka selama 4 detik
+
+    // 4. Tutup kembali galon, matikan LED hijau &amp; kembalikan LCD ke standby
+    servoTutup.write(SUDUT_TUTUP);
+    digitalWrite(PIN_LED_HIJAU, LOW);
+    tampilStandby();
+    lcd.noBacklight();
+  }
+
+  delay(50);
+}
+
+void tampilStandby() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("ECOBIN READY    ");
+  lcd.setCursor(0, 1);
+  lcd.print("TEKAN SENSOR    ");
+}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIKA SIMULASI 3D NATIVE THREE.JS & INTERAKSI -->
+    <script>
+        // ============================================================================
+        // 1. STATE SIMULASI ECOBIN
+        // ============================================================================
+        const simState = {
+            isOpen: false,
+            targetAngleDeg: 0,       // 0 derajat (tertutup) hingga 80 derajat (terbuka)
+            currentAngleDeg: 0,
+            wasteType: 'ORGANIK',    // 'ORGANIK' atau 'ANORGANIK'
+            xrayMode: false,
+            soundEnabled: true,
+            autoCloseTimeout: null,
+            autoCloseAnimFrame: null,
+            autoCloseEndTime: 0,
+            autoCloseDurationMs: 4000,
+            trashAnimating: false
+        };
+
+        // Synthesizer Efek Suara Web Audio API (Bip Sensor & Gerak Servo)
+        let audioCtx = null;
+        function playSoundEffect(type) {
+            if (!simState.soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContextClass) audioCtx = new AudioContextClass();
+                }
+                if (!audioCtx) return;
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const now = audioCtx.currentTime;
+                if (type === 'beep') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1046.5, now);
+                    osc.frequency.exponentialRampToValueAtTime(1567.98, now + 0.09);
+                    gain.gain.setValueAtTime(0.11, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else if (type === 'close') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(587.33, now);
+                    osc.frequency.exponentialRampToValueAtTime(329.63, now + 0.15);
+                    gain.gain.setValueAtTime(0.09, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.17);
+                } else if (type === 'servo') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(145, now);
+                    osc.frequency.linearRampToValueAtTime(195, now + 0.24);
+                    gain.gain.setValueAtTime(0.03, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.27);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.28);
+                }
+            } catch (e) {
+                // Abaikan pembatasan autoplay audio browser
+            }
+        }
+
+        // ============================================================================
+        // 2. VARIABEL SCENE THREE.JS & KONTROL KAMERA ORBIT NATIVE
+        // ============================================================================
+        let scene, camera, renderer;
+        let lastCanvasW = 0;
+        let lastCanvasH = 0;
+
+        // Grup & Mesh Komponen Utama ECOBIN
+        let lidPivotGroup, lidBracketMesh, servoHornGroup, servoHornTipObj, pushrodMesh;
+        let ledBulbMesh, ledPointLight, ledHaloMesh;
+        let lcdCanvas, lcdCtx, lcdTexture, lcdScreenMesh;
+        let electronicsBoxWallMat, arduinoInternalGroup;
+        let trashItemGroup;
+        const clickableObjects = [];
+
+        // State Kamera Orbit Spherical Native (Bebas Ketergantungan File Eksternal)
+        const orbitState = {
+            theta: 0.42,           // Sudut azimuth horizontal (radian)
+            phi: 1.18,             // Sudut polar vertikal dari sumbu Y (radian)
+            radius: 12.2,          // Jarak kamera ke target
+            target: null,          // THREE.Vector3 pusat pandangan
+            targetTheta: 0.42,
+            targetPhi: 1.18,
+            targetRadius: 12.2,
+            targetLookAt: null,
+            animatingPreset: false
+        };
+
+        let currentCamPreset = 'perspective';
+
+        // ============================================================================
+        // 3. TEKSTUR KANVAS PROSEDURAL (STIKER VINYL ECOBIN & LAYAR LCD 16x2)
+        // ============================================================================
+        function createEcobinStickerTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // Latar stiker vinyl putih bersih
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Garis tepi tipis atas & bawah stiker
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(0, 0, canvas.width, 8);
+            ctx.fillRect(0, canvas.height - 8, canvas.width, 8);
+
+            const cx = canvas.width / 2;
+
+            // Gambar simbol daur ulang 3 panah hijau
+            ctx.save();
+            ctx.translate(cx, 130);
+            ctx.fillStyle = '#16a34a';
+            ctx.strokeStyle = '#16a34a';
+            ctx.lineWidth = 10;
+            ctx.lineJoin = 'round';
+            for (let i = 0; i < 3; i++) {
+                ctx.save();
+                ctx.rotate((i * 2 * Math.PI) / 3);
+                ctx.beginPath();
+                ctx.moveTo(-26, -42);
+                ctx.lineTo(22, -42);
+                ctx.lineTo(34, -22);
+                ctx.stroke();
+
+                // Ujung panah
+                ctx.beginPath();
+                ctx.moveTo(42, -16);
+                ctx.lineTo(20, -18);
+                ctx.lineTo(35, -36);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+            ctx.restore();
+
+            // Tulisan "ECOBIN" (ECO hitam gelap, BIN hijau terang)
+            ctx.font = '800 112px Inter, Arial, sans-serif';
+            ctx.textBaseline = 'middle';
+            const ecoW = ctx.measureText('ECO').width;
+            const binW = ctx.measureText('BIN').width;
+            const startX = cx - (ecoW + binW) / 2;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillText('ECO', startX, 275);
+            ctx.fillStyle = '#16a34a';
+            ctx.fillText('BIN', startX + ecoW, 275);
+
+            // Subjudul "Tempat Sampah Pintar"
+            ctx.font = '600 40px Inter, Arial, sans-serif';
+            ctx.fillStyle = '#334155';
+            ctx.textAlign = 'center';
+            ctx.fillText('Tempat Sampah Pintar', cx, 365);
+
+            // Garis aksen hijau bawah
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.roundRect(cx - 170, 405, 340, 8, 4);
+            ctx.fill();
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.anisotropy = 4;
+            return tex;
+        }
+
+        function initLcdTexture() {
+            lcdCanvas = document.createElement('canvas');
+            lcdCanvas.width = 512;
+            lcdCanvas.height = 128;
+            lcdCtx = lcdCanvas.getContext('2d');
+            lcdTexture = new THREE.CanvasTexture(lcdCanvas);
+            lcdTexture.minFilter = THREE.LinearFilter;
+            lcdTexture.magFilter = THREE.LinearFilter;
+            updateLcdCanvas('ECOBIN READY    ', 'TEKAN SENSOR    ', false);
+        }
+
+        function updateLcdCanvas(line1, line2, isActive) {
+            if (!lcdCtx || !lcdTexture) return;
+
+            // Warna lampu latar LCD 16x2
+            if (isActive) {
+                const grad = lcdCtx.createLinearGradient(0, 0, 0, lcdCanvas.height);
+                grad.addColorStop(0, '#5eead4');
+                grad.addColorStop(1, '#34d399');
+                lcdCtx.fillStyle = grad;
+            } else {
+                lcdCtx.fillStyle = '#132623';
+            }
+            lcdCtx.fillRect(0, 0, lcdCanvas.width, lcdCanvas.height);
+
+            // Bingkai dalam tipis
+            lcdCtx.strokeStyle = isActive ? 'rgba(6, 78, 59, 0.35)' : 'rgba(94, 234, 212, 0.12)';
+            lcdCtx.lineWidth = 4;
+            lcdCtx.strokeRect(4, 4, lcdCanvas.width - 8, lcdCanvas.height - 8);
+
+            // Karakter 16x2 Monospace
+            lcdCtx.font = 'bold 38px "JetBrains Mono", monospace';
+            lcdCtx.textBaseline = 'middle';
+            lcdCtx.textAlign = 'left';
+            lcdCtx.fillStyle = isActive ? '#042f2e' : '#3b6e66';
+
+            const l1 = (line1 + '                ').slice(0, 16);
+            const l2 = (line2 + '                ').slice(0, 16);
+            lcdCtx.fillText(l1, 24, 42);
+            lcdCtx.fillText(l2, 24, 90);
+
+            lcdTexture.needsUpdate = true;
+
+            // Sinkronisasi ke layar LCD cermin di Panel Kontrol
+            const uiLcd = document.getElementById('ui-lcd-screen');
+            const uiL1 = document.getElementById('lcd-line-1');
+            const uiL2 = document.getElementById('lcd-line-2');
+            const uiBacklight = document.getElementById('lcd-backlight-label');
+
+            if (uiL1) uiL1.textContent = l1;
+            if (uiL2) uiL2.textContent = l2;
+            if (uiLcd) {
+                uiLcd.className = (isActive ? 'lcd-screen-active' : 'lcd-screen-standby') + ' rounded-lg p-3 font-mono-tech transition-all duration-300';
+            }
+            if (uiBacklight) {
+                uiBacklight.textContent = isActive ? 'BACKLIGHT ON' : 'STANDBY';
+                uiBacklight.className = isActive ? 'text-emerald-400 font-bold' : 'text-slate-500 font-semibold';
+            }
+        }
+
+        // ============================================================================
+        // 4. PEMBANGUNAN MODEL 3D GALON ECOBIN & MEKANISME TUAS SERVO
+        // ============================================================================
+        function buildEcobin3DModel() {
+            const ecobinRoot = new THREE.Group();
+            scene.add(ecobinRoot);
+
+            // --- A. LANTAI STUDIO & BAYANGAN KONTAK ---
+            const floorGeo = new THREE.CircleGeometry(14, 64);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0xf1f5f9,
+                roughness: 0.9,
+                metalness: 0.0
+            });
+            const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+            floorMesh.rotation.x = -Math.PI / 2;
+            floorMesh.position.y = -0.01;
+            scene.add(floorMesh);
+
+            const gridHelper = new THREE.GridHelper(16, 32, 0xcbd5e1, 0xe2e8f0);
+            gridHelper.position.y = 0;
+            scene.add(gridHelper);
+
+            // Cakram bayangan lembut di bawah alas galon
+            const shadowCanvas = document.createElement('canvas');
+            shadowCanvas.width = 256;
+            shadowCanvas.height = 256;
+            const sCtx = shadowCanvas.getContext('2d');
+            const sGrad = sCtx.createRadialGradient(128, 128, 20, 128, 128, 124);
+            sGrad.addColorStop(0, 'rgba(15, 23, 42, 0.36)');
+            sGrad.addColorStop(0.65, 'rgba(15, 23, 42, 0.14)');
+            sGrad.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+            sCtx.fillStyle = sGrad;
+            sCtx.fillRect(0, 0, 256, 256);
+            const shadowTex = new THREE.CanvasTexture(shadowCanvas);
+            const shadowDisc = new THREE.Mesh(
+                new THREE.PlaneGeometry(3.8, 3.8),
+                new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+            );
+            shadowDisc.rotation.x = -Math.PI / 2;
+            shadowDisc.position.y = 0.005;
+            ecobinRoot.add(shadowDisc);
+
+            // --- B. BADAN GALON BIRU BEKAS (DIPOTONG BAGIAN ATAS) ---
+            // Profil LatheGeometry mengikuti bentuk galon 19L berlekuk khas (~270mm x ~435mm)
+            const lathePoints = [
+                new THREE.Vector2(0.0, 0.04),
+                new THREE.Vector2(1.18, 0.04),
+                new THREE.Vector2(1.31, 0.14),
+                new THREE.Vector2(1.34, 0.32),
+                // Lekukan penguat bawah
+                new THREE.Vector2(1.27, 0.48),
+                new THREE.Vector2(1.35, 0.65),
+                new THREE.Vector2(1.27, 0.82),
+                new THREE.Vector2(1.34, 1.00),
+                // Bagian tengah silinder halus untuk stiker ECOBIN
+                new THREE.Vector2(1.33, 1.15),
+                new THREE.Vector2(1.33, 3.10),
+                // Lekukan penguat atas
+                new THREE.Vector2(1.35, 3.25),
+                new THREE.Vector2(1.27, 3.42),
+                new THREE.Vector2(1.35, 3.60),
+                new THREE.Vector2(1.33, 4.18),
+                // Bibir potongan atas galon
+                new THREE.Vector2(1.34, 4.30),
+                new THREE.Vector2(1.27, 4.30),
+                new THREE.Vector2(1.26, 4.15)
+            ];
+
+            const gallonGeo = new THREE.LatheGeometry(lathePoints, 64);
+            const gallonBlueMat = new THREE.MeshPhysicalMaterial({
+                color: 0x0284c7,
+                emissive: 0x0369a1,
+                emissiveIntensity: 0.12,
+                roughness: 0.18,
+                metalness: 0.05,
+                transparent: true,
+                opacity: 0.78,
+                side: THREE.DoubleSide
+            });
+            const gallonMesh = new THREE.Mesh(gallonGeo, gallonBlueMat);
+            ecobinRoot.add(gallonMesh);
+
+            // Kantong Plastik Sampah Hitam di Bagian Dalam Galon (Terlihat saat tutup terbuka)
+            const linerGeo = new THREE.CylinderGeometry(1.25, 1.18, 4.10, 48, 1, true);
+            const linerMat = new THREE.MeshStandardMaterial({
+                color: 0x18181b,
+                roughness: 0.55,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            const linerMesh = new THREE.Mesh(linerGeo, linerMat);
+            linerMesh.position.y = 2.15;
+            ecobinRoot.add(linerMesh);
+
+            const linerBottom = new THREE.Mesh(
+                new THREE.CircleGeometry(1.18, 48),
+                new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.8 })
+            );
+            linerBottom.rotation.x = -Math.PI / 2;
+            linerBottom.position.y = 0.12;
+            ecobinRoot.add(linerBottom);
+
+            // --- C. STIKER VINYL PUTIH ECOBIN MELINGKARI TENGAH GALON ---
+            const stickerTex = createEcobinStickerTexture();
+            // Sudut lengkung 150 derajat di bagian depan galon (pusat menghadap +Z)
+            const arcAngle = Math.PI * 0.88;
+            const stickerGeo = new THREE.CylinderGeometry(
+                1.342, 1.342, 1.88, 48, 1, true,
+                -arcAngle / 2, arcAngle
+            );
+            const stickerMat = new THREE.MeshStandardMaterial({
+                map: stickerTex,
+                roughness: 0.35,
+                metalness: 0.02,
+                side: THREE.DoubleSide
+            });
+            const stickerMesh = new THREE.Mesh(stickerGeo, stickerMat);
+            stickerMesh.position.y = 2.12;
+            ecobinRoot.add(stickerMesh);
+
+            // --- D. RING HITAM BIBIR ATAS GALON & DUA ENGSEL BELAKANG ---
+            const blackPlasticMat = new THREE.MeshStandardMaterial({
+                color: 0x1e293b,
+                roughness: 0.45,
+                metalness: 0.15
+            });
+            const darkMetalMat = new THREE.MeshStandardMaterial({
+                color: 0x334155,
+                roughness: 0.35,
+                metalness: 0.75
+            });
+            const silverMetalMat = new THREE.MeshStandardMaterial({
+                color: 0xe2e8f0,
+                roughness: 0.25,
+                metalness: 0.85
+            });
+
+            const topRimMesh = new THREE.Mesh(
+                new THREE.TorusGeometry(1.31, 0.065, 16, 64),
+                blackPlasticMat
+            );
+            topRimMesh.rotation.x = Math.PI / 2;
+            topRimMesh.position.y = 4.32;
+            ecobinRoot.add(topRimMesh);
+
+            // Dua Engsel Kecil di Bagian Belakang Atas (z = -1.33, y = 4.38)
+            [-0.44, 0.44].forEach(hx => {
+                const hingeBase = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.18), darkMetalMat);
+                hingeBase.position.set(hx, 4.37, -1.32);
+                ecobinRoot.add(hingeBase);
+
+                const hingePin = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.28, 16), silverMetalMat);
+                hingePin.rotation.z = Math.PI / 2;
+                hingePin.position.set(hx, 4.40, -1.35);
+                ecobinRoot.add(hingePin);
+            });
+
+            // --- E. TUTUP PAPAN PLASTIK PUTIH DENGAN AKSEN LINGKARAN HIJAU ---
+            lidPivotGroup = new THREE.Group();
+            lidPivotGroup.position.set(0, 4.40, -1.35);
+            ecobinRoot.add(lidPivotGroup);
+
+            // Bingkai hitam pinggir tutup
+            const lidOuterTrim = new THREE.Mesh(
+                new THREE.CylinderGeometry(1.38, 1.38, 0.075, 64),
+                blackPlasticMat
+            );
+            lidOuterTrim.position.set(0, 0.035, 1.35);
+            lidPivotGroup.add(lidOuterTrim);
+            clickableObjects.push(lidOuterTrim);
+
+            // Papan plastik/akrilik putih utama tutup
+            const lidWhiteBoard = new THREE.Mesh(
+                new THREE.CylinderGeometry(1.34, 1.34, 0.082, 64),
+                new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.32, metalness: 0.05 })
+            );
+            lidWhiteBoard.position.set(0, 0.036, 1.35);
+            lidPivotGroup.add(lidWhiteBoard);
+            clickableObjects.push(lidWhiteBoard);
+
+            // Aksen lingkaran hijau di tengah tutup (sesuai konsep ECOBIN)
+            const lidGreenDot = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.36, 0.36, 0.086, 48),
+                new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.35 })
+            );
+            lidGreenDot.position.set(0, 0.037, 1.35);
+            lidPivotGroup.add(lidGreenDot);
+            clickableObjects.push(lidGreenDot);
+
+            // Braket penghubung tuas pushrod servo di bagian bawah belakang tutup
+            lidBracketMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.16), darkMetalMat);
+            lidBracketMesh.position.set(0.42, -0.04, 0.56);
+            lidPivotGroup.add(lidBracketMesh);
+
+            // --- F. MODUL DEPAN GALON: SENSOR SENTUH/PROKSIMITAS, LED HIJAU & LCD 16x2 ---
+            const frontModuleGroup = new THREE.Group();
+            frontModuleGroup.position.set(0, 3.68, 1.35);
+            ecobinRoot.add(frontModuleGroup);
+
+            // Rumah bingkai hitam modul depan dengan 4 sekrup sudut
+            const bezelBox = new THREE.Mesh(
+                new THREE.BoxGeometry(1.56, 0.72, 0.18),
+                blackPlasticMat
+            );
+            frontModuleGroup.add(bezelBox);
+            clickableObjects.push(bezelBox);
+
+            [[-0.70, 0.28], [0.70, 0.28], [-0.70, -0.28], [0.70, -0.28]].forEach(([sx, sy]) => {
+                const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.19, 12), silverMetalMat);
+                screw.rotation.x = Math.PI / 2;
+                screw.position.set(sx, sy, 0.005);
+                frontModuleGroup.add(screw);
+            });
+
+            // 1. Sensor Ultrasonik / Sentuh Proksimitas Depan (Kiri Atas Modul)
+            const sensorPcb = new THREE.Mesh(
+                new THREE.BoxGeometry(0.76, 0.28, 0.05),
+                new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 })
+            );
+            sensorPcb.position.set(-0.24, 0.15, 0.095);
+            frontModuleGroup.add(sensorPcb);
+            clickableObjects.push(sensorPcb);
+
+            [-0.43, -0.05].forEach(tx => {
+                const cylinder = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.115, 0.115, 0.11, 24),
+                    silverMetalMat
+                );
+                cylinder.rotation.x = Math.PI / 2;
+                cylinder.position.set(tx, 0.15, 0.13);
+                frontModuleGroup.add(cylinder);
+                clickableObjects.push(cylinder);
+
+                const meshCore = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.088, 0.088, 0.115, 24),
+                    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
+                );
+                meshCore.rotation.x = Math.PI / 2;
+                meshCore.position.set(tx, 0.15, 0.132);
+                frontModuleGroup.add(meshCore);
+                clickableObjects.push(meshCore);
+            });
+
+            // 2. Lampu Indikator LED Hijau di Depan (Kanan Atas Modul)
+            const ledBezel = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.085, 0.095, 0.06, 24),
+                silverMetalMat
+            );
+            ledBezel.rotation.x = Math.PI / 2;
+            ledBezel.position.set(0.44, 0.15, 0.10);
+            frontModuleGroup.add(ledBezel);
+
+            const ledBulbMat = new THREE.MeshStandardMaterial({
+                color: 0x14532d,
+                emissive: 0x22c55e,
+                emissiveIntensity: 0.0,
+                roughness: 0.15
+            });
+            ledBulbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.065, 24, 24), ledBulbMat);
+            ledBulbMesh.position.set(0.44, 0.15, 0.125);
+            frontModuleGroup.add(ledBulbMesh);
+            clickableObjects.push(ledBulbMesh);
+
+            // Halo cahaya lembut sekitar LED Hijau saat menyala
+            ledHaloMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.14, 16, 16),
+                new THREE.MeshBasicMaterial({
+                    color: 0x4ade80,
+                    transparent: true,
+                    opacity: 0.0,
+                    depthWrite: false
+                })
+            );
+            ledHaloMesh.position.set(0.44, 0.15, 0.13);
+            frontModuleGroup.add(ledHaloMesh);
+
+            // Cahaya titik nyata saat LED Hijau aktif
+            ledPointLight = new THREE.PointLight(0x22c55e, 0, 2.5);
+            ledPointLight.position.set(0.44, 0.15, 0.35);
+            frontModuleGroup.add(ledPointLight);
+
+            // 3. Layar LCD Karakter 16x2 di Depan Galon (Bawah Modul)
+            initLcdTexture();
+            const lcdFrame = new THREE.Mesh(
+                new THREE.BoxGeometry(1.32, 0.31, 0.05),
+                new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.5 })
+            );
+            lcdFrame.position.set(0, -0.16, 0.095);
+            frontModuleGroup.add(lcdFrame);
+            clickableObjects.push(lcdFrame);
+
+            lcdScreenMesh = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.22, 0.25),
+                new THREE.MeshBasicMaterial({ map: lcdTexture })
+            );
+            lcdScreenMesh.position.set(0, -0.16, 0.123);
+            frontModuleGroup.add(lcdScreenMesh);
+            clickableObjects.push(lcdScreenMesh);
+
+            // --- G. KOTAK ELEKTRONIK BELAKANG, ARDUINO, BATERAI & TUAS SERVO ---
+            const boxGroup = new THREE.Group();
+            boxGroup.position.set(0, 3.85, -1.78);
+            ecobinRoot.add(boxGroup);
+
+            electronicsBoxWallMat = new THREE.MeshStandardMaterial({
+                color: 0x18181b,
+                roughness: 0.45,
+                metalness: 0.2,
+                transparent: false,
+                opacity: 1.0
+            });
+
+            // 6 Dinding Kotak Elektronik (agar transparan rapi saat mode X-Ray Kotak aktif)
+            const bw = 1.48, bh = 1.12, bd = 0.72, wt = 0.04;
+            const walls = [
+                { geo: [bw, bh, wt], pos: [0, 0, -bd / 2] },               // Belakang
+                { geo: [bw, bh, wt], pos: [0, 0, bd / 2] },                // Depan (menghadap galon)
+                { geo: [wt, bh, bd], pos: [-bw / 2, 0, 0] },               // Kiri
+                { geo: [wt, bh, bd], pos: [bw / 2, 0, 0] },                // Kanan
+                { geo: [bw, wt, bd], pos: [0, -bh / 2, 0] },               // Bawah
+                { geo: [bw, wt, bd], pos: [0, bh / 2, 0] }                 // Tutup Atas Kotak
+            ];
+            walls.forEach(w => {
+                const m = new THREE.Mesh(new THREE.BoxGeometry(...w.geo), electronicsBoxWallMat);
+                m.position.set(...w.pos);
+                boxGroup.add(m);
+            });
+
+            // Komponen Internal di Dalam Kotak Elektronik
+            arduinoInternalGroup = new THREE.Group();
+            boxGroup.add(arduinoInternalGroup);
+
+            // Papan Arduino Uno/Nano (PCB Biru)
+            const arduinoBoard = new THREE.Mesh(
+                new THREE.BoxGeometry(0.68, 0.52, 0.05),
+                new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.35, metalness: 0.2 })
+            );
+            arduinoBoard.position.set(-0.28, 0.08, -0.14);
+            arduinoInternalGroup.add(arduinoBoard);
+
+            const mcuChip = new THREE.Mesh(
+                new THREE.BoxGeometry(0.28, 0.12, 0.04),
+                new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 })
+            );
+            mcuChip.position.set(-0.26, 0.04, -0.10);
+            arduinoInternalGroup.add(mcuChip);
+
+            // Modul Baterai / Sumber Daya
+            const batteryPack = new THREE.Mesh(
+                new THREE.BoxGeometry(0.62, 0.30, 0.22),
+                new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 })
+            );
+            batteryPack.position.set(-0.26, -0.32, 0.05);
+            arduinoInternalGroup.add(batteryPack);
+
+            // Motor Servo MG996R / SG90 di Sisi Kanan Kotak Elektronik
+            const servoBody = new THREE.Mesh(
+                new THREE.BoxGeometry(0.36, 0.44, 0.34),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.4 })
+            );
+            servoBody.position.set(0.42, 0.16, 0.12);
+            arduinoInternalGroup.add(servoBody);
+
+            // Poros & Lengan Penggerak Servo (Servo Horn)
+            servoHornGroup = new THREE.Group();
+            servoHornGroup.position.set(0.42, 0.42, 0.22);
+            arduinoInternalGroup.add(servoHornGroup);
+
+            const hornArm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.36, 0.06),
+                new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 })
+            );
+            hornArm.position.set(0, 0.14, 0);
+            servoHornGroup.add(hornArm);
+
+            // Titik ujung lengan servo untuk penyambungan batang dorong (pushrod)
+            servoHornTipObj = new THREE.Object3D();
+            servoHornTipObj.position.set(0, 0.28, 0.02);
+            servoHornGroup.add(servoHornTipObj);
+
+            // Batang Kawat Dorong Logam (Pushrod Linkage) antara Lengan Servo & Tutup
+            pushrodMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.02, 1.0, 12),
+                silverMetalMat
+            );
+            ecobinRoot.add(pushrodMesh);
+
+            // Jalur Kabel Sensor dari Modul Depan ke Kotak Elektronik Belakang
+            const cableCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.76, 3.68, 1.32),
+                new THREE.Vector3(1.38, 3.55, 0.72),
+                new THREE.Vector3(1.42, 3.65, -0.45),
+                new THREE.Vector3(1.18, 3.82, -1.45),
+                new THREE.Vector3(0.74, 3.88, -1.78)
+            ]);
+            const cableMesh = new THREE.Mesh(
+                new THREE.TubeGeometry(cableCurve, 32, 0.026, 8, false),
+                blackPlasticMat
+            );
+            ecobinRoot.add(cableMesh);
+
+            // Grup animasi item sampah simulasi
+            trashItemGroup = new THREE.Group();
+            trashItemGroup.visible = false;
+            ecobinRoot.add(trashItemGroup);
+
+            // Sinkronisasi posisi awal tuas servo
+            updateMechanicalLinkage();
+        }
+
+        // ============================================================================
+        // 5. KINEMATIKA TUAS SERVO & PEMBARUAN VISUAL REAL-TIME
+        // ============================================================================
+        const _hornWorldPos = new THREE.Vector3();
+        const _lidBracketWorldPos = new THREE.Vector3();
+        const _midPoint = new THREE.Vector3();
+        const _upVec = new THREE.Vector3(0, 1, 0);
+        const _dirVec = new THREE.Vector3();
+
+        function updateMechanicalLinkage() {
+            if (!lidPivotGroup || !servoHornGroup || !pushrodMesh) return;
+
+            const angleRad = THREE.MathUtils.degToRad(simState.currentAngleDeg);
+
+            // 1. Putar tutup papan plastik pada poros engsel belakang (0° hingga 80°)
+            lidPivotGroup.rotation.x = -angleRad;
+
+            // 2. Putar lengan motor servo di dalam kotak elektronik
+            servoHornGroup.rotation.x = -angleRad * 0.85 + 0.15;
+
+            // 3. Hitung posisi dunia ujung lengan servo & braket bawah tutup untuk menyambung pushrod
+            lidPivotGroup.updateMatrixWorld(true);
+            servoHornGroup.updateMatrixWorld(true);
+
+            servoHornTipObj.getWorldPosition(_hornWorldPos);
+            lidBracketMesh.getWorldPosition(_lidBracketWorldPos);
+
+            _midPoint.addVectors(_hornWorldPos, _lidBracketWorldPos).multiplyScalar(0.5);
+            pushrodMesh.position.copy(_midPoint);
+
+            const dist = _hornWorldPos.distanceTo(_lidBracketWorldPos);
+            pushrodMesh.scale.set(1, Math.max(dist, 0.05), 1);
+
+            _dirVec.subVectors(_lidBracketWorldPos, _hornWorldPos).normalize();
+            pushrodMesh.quaternion.setFromUnitVectors(_upVec, _dirVec);
+        }
+
+        function updateSystemIndicators(isActive) {
+            // 1. Lampu LED Hijau 3D & UI
+            if (ledBulbMesh && ledPointLight && ledHaloMesh) {
+                ledBulbMesh.material.color.setHex(isActive ? 0x4ade80 : 0x14532d);
+                ledBulbMesh.material.emissiveIntensity = isActive ? 2.4 : 0.0;
+                ledPointLight.intensity = isActive ? 1.8 : 0.0;
+                ledHaloMesh.material.opacity = isActive ? 0.35 : 0.0;
+            }
+
+            const uiLedDot = document.getElementById('ui-led-dot');
+            const uiLedText = document.getElementById('ui-led-text');
+            if (uiLedDot) {
+                uiLedDot.className = isActive
+                    ? 'w-3.5 h-3.5 rounded-full bg-emerald-400 border border-emerald-200 shadow-[0_0_12px_#34d399] transition-all duration-300'
+                    : 'w-3.5 h-3.5 rounded-full bg-emerald-950 border border-emerald-800 transition-all duration-300';
+            }
+            if (uiLedText) {
+                uiLedText.textContent = isActive ? 'NYALA (HIJAU)' : 'MATI';
+                uiLedText.className = isActive
+                    ? 'text-xs font-mono-tech font-bold text-emerald-400'
+                    : 'text-xs font-mono-tech font-bold text-slate-500';
+            }
+
+            // 2. Badge Status Header
+            const badge = document.getElementById('system-state-badge');
+            const pulseDot = document.getElementById('header-pulse-dot');
+            if (badge) {
+                badge.textContent = isActive ? 'TERBUKA' : 'TERTUTUP';
+                badge.className = isActive
+                    ? 'text-[11px] font-mono-tech px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold shrink-0'
+                    : 'text-[11px] font-mono-tech px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-semibold shrink-0';
+            }
+            if (pulseDot) {
+                pulseDot.className = isActive
+                    ? 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] transition-colors'
+                    : 'w-2 h-2 rounded-full bg-slate-500 transition-colors';
+            }
+
+            // 3. Layar LCD Karakter 16x2 (3D & Panel Cermin)
+            if (isActive) {
+                const line2 = simState.wasteType === 'ORGANIK' ? 'JENIS: ORGANIK  ' : 'JENIS: ANORGANIK';
+                updateLcdCanvas('STATUS: TERBUKA ', line2, true);
+            } else {
+                updateLcdCanvas('ECOBIN READY    ', 'TEKAN SENSOR    ', false);
+            }
+        }
+
+        // ============================================================================
+        // 6. AKSI INTERAKTIF: SENSOR DEPAN, KATEGORI SAMPAH & SIMULASI BUANG
+        // ============================================================================
+        function clearAutoCloseTimer() {
+            if (simState.autoCloseTimeout) {
+                clearTimeout(simState.autoCloseTimeout);
+                simState.autoCloseTimeout = null;
+            }
+            if (simState.autoCloseAnimFrame) {
+                cancelAnimationFrame(simState.autoCloseAnimFrame);
+                simState.autoCloseAnimFrame = null;
+            }
+            const wrapper = document.getElementById('auto-close-bar-wrapper');
+            if (wrapper) wrapper.classList.add('hidden');
+        }
+
+        function startAutoCloseTimer() {
+            clearAutoCloseTimer();
+            const chkAuto = document.getElementById('chk-auto-close');
+            if (!chkAuto || !chkAuto.checked) return;
+
+            const wrapper = document.getElementById('auto-close-bar-wrapper');
+            const progressEl = document.getElementById('auto-close-progress');
+            const countdownEl = document.getElementById('auto-close-countdown');
+            if (wrapper) wrapper.classList.remove('hidden');
+
+            simState.autoCloseEndTime = performance.now() + simState.autoCloseDurationMs;
+
+            function tickTimer(now) {
+                const remaining = Math.max(0, simState.autoCloseEndTime - now);
+                const pct = (remaining / simState.autoCloseDurationMs) * 100;
+                if (progressEl) progressEl.style.width = pct + '%';
+                if (countdownEl) countdownEl.textContent = (remaining / 1000).toFixed(1) + ' d';
+
+                if (remaining > 0 && simState.isOpen) {
+                    simState.autoCloseAnimFrame = requestAnimationFrame(tickTimer);
+                }
+            }
+            simState.autoCloseAnimFrame = requestAnimationFrame(tickTimer);
+
+            simState.autoCloseTimeout = setTimeout(() => {
+                if (simState.isOpen) {
+                    closeEcobinLid();
+                }
+            }, simState.autoCloseDurationMs);
+        }
+
+        function openEcobinLid() {
+            simState.isOpen = true;
+            simState.targetAngleDeg = 80;
+            playSoundEffect('beep');
+            setTimeout(() => playSoundEffect('servo'), 60);
+            updateSystemIndicators(true);
+            startAutoCloseTimer();
+        }
+
+        function closeEcobinLid() {
+            simState.isOpen = false;
+            simState.targetAngleDeg = 0;
+            clearAutoCloseTimer();
+            playSoundEffect('close');
+            updateSystemIndicators(false);
+        }
+
+        function toggleFrontSensor() {
+            if (simState.isOpen) {
+                closeEcobinLid();
+            } else {
+                openEcobinLid();
+            }
+        }
+
+        function setWasteCategory(type) {
+            simState.wasteType = type;
+
+            const btnOrg = document.getElementById('btn-mode-organik');
+            const btnAnorg = document.getElementById('btn-mode-anorganik');
+            const badge = document.getElementById('waste-badge');
+
+            if (type === 'ORGANIK') {
+                if (btnOrg) btnOrg.className = 'py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 bg-emerald-600/30 border-emerald-400 text-emerald-200 shadow';
+                if (btnAnorg) btnAnorg.className = 'py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800';
+                if (badge) {
+                    badge.textContent = 'ORGANIK';
+                    badge.className = 'text-[10px] font-mono-tech px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold';
+                }
+            } else {
+                if (btnAnorg) btnAnorg.className = 'py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 bg-sky-600/30 border-sky-400 text-sky-200 shadow';
+                if (btnOrg) btnOrg.className = 'py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800';
+                if (badge) {
+                    badge.textContent = 'ANORGANIK';
+                    badge.className = 'text-[10px] font-mono-tech px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold';
+                }
+            }
+
+            playSoundEffect('beep');
+            if (simState.isOpen) {
+                updateSystemIndicators(true);
+            }
+        }
+
+        function onManualServoSlide(val) {
+            const deg = Number(val);
+            clearAutoCloseTimer();
+            simState.targetAngleDeg = deg;
+            simState.isOpen = deg > 10;
+            updateSystemIndicators(simState.isOpen);
+        }
+
+        function simulateThrowTrash() {
+            if (simState.trashAnimating) return;
+            simState.trashAnimating = true;
+
+            if (!simState.isOpen) {
+                openEcobinLid();
+            } else {
+                startAutoCloseTimer();
+            }
+
+            // Bersihkan mesh sampah sebelumnya
+            while (trashItemGroup.children.length > 0) {
+                trashItemGroup.remove(trashItemGroup.children[0]);
+            }
+
+            if (simState.wasteType === 'ORGANIK') {
+                // Bentuk apel/daun organik
+                const apple = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.26, 20, 20),
+                    new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 })
+                );
+                const leaf = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.16, 0.04, 0.09),
+                    new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.5 })
+                );
+                leaf.position.set(0.08, 0.27, 0);
+                leaf.rotation.z = 0.4;
+                trashItemGroup.add(apple, leaf);
+            } else {
+                // Bentuk botol plastik anorganik
+                const bottle = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.16, 0.16, 0.54, 20),
+                    new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.2, transparent: true, opacity: 0.85 })
+                );
+                const cap = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.08, 0.08, 0.10, 16),
+                    new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3 })
+                );
+                cap.position.y = 0.32;
+                trashItemGroup.add(bottle, cap);
+            }
+
+            trashItemGroup.visible = true;
+            const startTime = performance.now();
+            const duration = 950;
+
+            function animateTrashDrop(now) {
+                const t = Math.min(1, (now - startTime) / duration);
+                // Lintasan parabola dari depan atas masuk ke mulut galon
+                const zPos = 2.2 * (1 - t);
+                const yPos = 4.6 + Math.sin(t * Math.PI) * 1.4 - t * t * 2.5;
+                trashItemGroup.position.set(0, yPos, zPos);
+                trashItemGroup.rotation.x = t * Math.PI * 2.5;
+                trashItemGroup.rotation.z = t * Math.PI * 1.4;
+
+                if (t < 1) {
+                    requestAnimationFrame(animateTrashDrop);
+                } else {
+                    trashItemGroup.visible = false;
+                    simState.trashAnimating = false;
+                }
+            }
+            setTimeout(() => requestAnimationFrame(animateTrashDrop), 260);
+        }
+
+        // ============================================================================
+        // 7. KONTROL KAMERA ORBIT NATIVE, PRESET VIEW, X-RAY & MODAL KODE
+        // ============================================================================
+        function getAspectScale() {
+            const container = document.getElementById('canvas-container');
+            if (!container || container.clientHeight <= 0) return 1.0;
+            const aspect = container.clientWidth / container.clientHeight;
+            // Sesuaikan jarak agar galon penuh dari alas hingga tutup terbuka 80° muat di layar HP portrait
+            return aspect < 1.0 ? Math.min(1.36, 1.02 / Math.max(aspect, 0.62)) : 1.0;
+        }
+
+        function setCameraView(preset) {
+            currentCamPreset = preset;
+            document.querySelectorAll('.cam-btn').forEach(btn => {
+                if (btn.id === 'cam-servo') {
+                    btn.className = 'cam-btn px-2.5 py-2 rounded-lg text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition';
+                } else {
+                    btn.className = 'cam-btn px-2.5 py-2 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition';
+                }
+            });
+
+            const activeBtn = document.getElementById('cam-' + preset);
+            if (activeBtn) {
+                activeBtn.className = 'cam-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white transition';
+            }
+
+            const scale = getAspectScale();
+            if (!orbitState.targetLookAt) orbitState.targetLookAt = new THREE.Vector3(0, 2.55, 0);
+
+            switch (preset) {
+                case 'front':
+                    orbitState.targetTheta = 0.0;
+                    orbitState.targetPhi = 1.38;
+                    orbitState.targetRadius = 11.4 * scale;
+                    orbitState.targetLookAt.set(0, 2.55, 0);
+                    break;
+                case 'top':
+                    orbitState.targetTheta = 0.0;
+                    orbitState.targetPhi = 0.16;
+                    orbitState.targetRadius = 11.8 * scale;
+                    orbitState.targetLookAt.set(0, 2.25, 0);
+                    break;
+                case 'servo':
+                    orbitState.targetTheta = 2.55;
+                    orbitState.targetPhi = 1.15;
+                    orbitState.targetRadius = 6.2 * scale;
+                    orbitState.targetLookAt.set(0.25, 3.85, -1.35);
+                    break;
+                default: // 'perspective'
+                    orbitState.targetTheta = 0.44;
+                    orbitState.targetPhi = 1.18;
+                    orbitState.targetRadius = 12.0 * scale;
+                    orbitState.targetLookAt.set(0, 2.55, 0);
+                    break;
+            }
+            orbitState.animatingPreset = true;
+        }
+
+        function updateCameraFromOrbit() {
+            if (!camera || !orbitState.target) return;
+
+            if (orbitState.animatingPreset) {
+                orbitState.theta += (orbitState.targetTheta - orbitState.theta) * 0.12;
+                orbitState.phi += (orbitState.targetPhi - orbitState.phi) * 0.12;
+                orbitState.radius += (orbitState.targetRadius - orbitState.radius) * 0.12;
+                orbitState.target.lerp(orbitState.targetLookAt, 0.12);
+
+                if (
+                    Math.abs(orbitState.targetTheta - orbitState.theta) < 0.004 &&
+                    Math.abs(orbitState.targetPhi - orbitState.phi) < 0.004 &&
+                    Math.abs(orbitState.targetRadius - orbitState.radius) < 0.02
+                ) {
+                    orbitState.animatingPreset = false;
+                }
+            }
+
+            // Batasi sudut vertikal agar kamera tidak menembus lantai
+            orbitState.phi = Math.max(0.08, Math.min(Math.PI / 2 - 0.03, orbitState.phi));
+            orbitState.radius = Math.max(3.5, Math.min(19.0, orbitState.radius));
+
+            const sinPhi = Math.sin(orbitState.phi);
+            const cosPhi = Math.cos(orbitState.phi);
+            const sinTheta = Math.sin(orbitState.theta);
+            const cosTheta = Math.cos(orbitState.theta);
+
+            camera.position.set(
+                orbitState.target.x + orbitState.radius * sinPhi * sinTheta,
+                orbitState.target.y + orbitState.radius * cosPhi,
+                orbitState.target.z + orbitState.radius * sinPhi * cosTheta
+            );
+            camera.lookAt(orbitState.target);
+        }
+
+        function toggleXRay() {
+            simState.xrayMode = !simState.xrayMode;
+            const btn = document.getElementById('btn-toggle-xray');
+
+            if (electronicsBoxWallMat) {
+                electronicsBoxWallMat.transparent = simState.xrayMode;
+                electronicsBoxWallMat.opacity = simState.xrayMode ? 0.22 : 1.0;
+                electronicsBoxWallMat.depthWrite = !simState.xrayMode;
+                electronicsBoxWallMat.needsUpdate = true;
+            }
+
+            if (btn) {
+                btn.className = simState.xrayMode
+                    ? 'flex-1 px-2.5 py-2 rounded-lg text-xs font-semibold bg-amber-500/30 text-amber-200 border border-amber-400/60 transition flex items-center justify-center gap-1.5'
+                    : 'flex-1 px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-1.5';
+            }
+        }
+
+        function toggleSound() {
+            simState.soundEnabled = !simState.soundEnabled;
+            const icon = document.getElementById('icon-sound');
+            const btn = document.getElementById('btn-toggle-sound');
+            if (icon) {
+                icon.className = simState.soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+            }
+            if (btn) {
+                btn.className = simState.soundEnabled
+                    ? 'px-3 py-2 rounded-lg text-xs font-medium bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/50 transition'
+                    : 'px-3 py-2 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 transition';
+            }
+        }
+
+        function openCodeModal() {
+            const modal = document.getElementById('code-modal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeCodeModal() {
+            const modal = document.getElementById('code-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function copyArduinoCode() {
+            const codeEl = document.getElementById('arduino-code-block');
+            const btn = document.getElementById('btn-copy-code');
+            if (!codeEl) return;
+
+            const tempArea = document.createElement('textarea');
+            tempArea.value = codeEl.textContent;
+            tempArea.style.position = 'fixed';
+            tempArea.style.opacity = '0';
+            document.body.appendChild(tempArea);
+            tempArea.select();
+            try {
+                document.execCommand('copy');
+                if (btn) {
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i><span>Tersalin!</span>';
+                    setTimeout(() => {
+                        btn.innerHTML = '<i class="fa-regular fa-copy"></i><span>Salin Kode</span>';
+                    }, 2000);
+                }
+            } catch (e) {
+                // Abaikan jika gagal menyalin
+            }
+            document.body.removeChild(tempArea);
+        }
+
+        // ============================================================================
+        // 8. KONTROL GESTUR MOUSE & SENTUHAN (ORBIT, PINCH ZOOM & RAYCAST TAP)
+        // ============================================================================
+        function setupPointerAndTouchControls(domElement) {
+            const raycaster = new THREE.Raycaster();
+            const pointerNdc = new THREE.Vector2();
+
+            let isPointerDown = false;
+            let startX = 0;
+            let startY = 0;
+            let lastX = 0;
+            let lastY = 0;
+            let totalMoveDist = 0;
+            let initialPinchDist = 0;
+
+            function handleRaycastTap(clientX, clientY) {
+                if (!camera || clickableObjects.length === 0) return;
+                const rect = domElement.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) return;
+
+                pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+                pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera(pointerNdc, camera);
+                const hits = raycaster.intersectObjects(clickableObjects, false);
+                if (hits.length > 0) {
+                    toggleFrontSensor();
+                }
+            }
+
+            // Event Mouse Desktop
+            domElement.addEventListener('mousedown', (e) => {
+                isPointerDown = true;
+                orbitState.animatingPreset = false;
+                startX = lastX = e.clientX;
+                startY = lastY = e.clientY;
+                totalMoveDist = 0;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isPointerDown) return;
+                const dx = e.clientX - lastX;
+                const dy = e.clientY - lastY;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                totalMoveDist += Math.hypot(dx, dy);
+
+                orbitState.theta -= dx * 0.0085;
+                orbitState.phi -= dy * 0.0085;
+            });
+
+            window.addEventListener('mouseup', (e) => {
+                if (!isPointerDown) return;
+                isPointerDown = false;
+                if (totalMoveDist < 8) {
+                    handleRaycastTap(e.clientX, e.clientY);
+                }
+            });
+
+            domElement.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                orbitState.animatingPreset = false;
+                orbitState.radius += e.deltaY * 0.008;
+            }, { passive: false });
+
+            // Event Sentuh Layar HP (1 Jari Orbit / Ketuk, 2 Jari Pinch Zoom)
+            domElement.addEventListener('touchstart', (e) => {
+                orbitState.animatingPreset = false;
+                if (e.touches.length === 1) {
+                    isPointerDown = true;
+                    startX = lastX = e.touches[0].clientX;
+                    startY = lastY = e.touches[0].clientY;
+                    totalMoveDist = 0;
+                } else if (e.touches.length === 2) {
+                    isPointerDown = false;
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    initialPinchDist = Math.hypot(dx, dy);
+                }
+            }, { passive: true });
+
+            domElement.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1 && isPointerDown) {
+                    const dx = e.touches[0].clientX - lastX;
+                    const dy = e.touches[0].clientY - lastY;
+                    lastX = e.touches[0].clientX;
+                    lastY = e.touches[0].clientY;
+                    totalMoveDist += Math.hypot(dx, dy);
+
+                    orbitState.theta -= dx * 0.0095;
+                    orbitState.phi -= dy * 0.0095;
+                } else if (e.touches.length === 2) {
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    const currentDist = Math.hypot(dx, dy);
+                    if (initialPinchDist > 0) {
+                        const delta = initialPinchDist - currentDist;
+                        orbitState.radius += delta * 0.025;
+                    }
+                    initialPinchDist = currentDist;
+                }
+            }, { passive: true });
+
+            domElement.addEventListener('touchend', (e) => {
+                if (isPointerDown && e.changedTouches.length === 1 && totalMoveDist < 10) {
+                    const touch = e.changedTouches[0];
+                    handleRaycastTap(touch.clientX, touch.clientY);
+                }
+                if (e.touches.length === 0) {
+                    isPointerDown = false;
+                    initialPinchDist = 0;
+                }
+            });
+        }
+
+        // ============================================================================
+        // 9. INISIALISASI SCENE THREE.JS, PENJAGA DIMENSI & LOOP ANIMASI
+        // ============================================================================
+        function syncRendererSize() {
+            const container = document.getElementById('canvas-container');
+            if (!container || !renderer || !camera) return;
+
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            if (w <= 0 || h <= 0) return;
+
+            if (w !== lastCanvasW || h !== lastCanvasH) {
+                lastCanvasW = w;
+                lastCanvasH = h;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h, false);
+            }
+        }
+
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            if (!container || !window.THREE) return;
+
+            const initW = Math.max(container.clientWidth, 300);
+            const initH = Math.max(container.clientHeight, 240);
+
+            scene = new THREE.Scene();
+
+            const scale = getAspectScale();
+            orbitState.target = new THREE.Vector3(0, 2.55, 0);
+            orbitState.targetLookAt = new THREE.Vector3(0, 2.55, 0);
+            orbitState.theta = 0.44;
+            orbitState.phi = 1.18;
+            orbitState.radius = 12.0 * scale;
+
+            camera = new THREE.PerspectiveCamera(40, initW / initH, 0.1, 100);
+            updateCameraFromOrbit();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            renderer.setSize(initW, initH, false);
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.innerHTML = '';
+            container.appendChild(renderer.domElement);
+
+            lastCanvasW = initW;
+            lastCanvasH = initH;
+
+            // Pencahayaan Studio 3 Titik agar Galon Biru Transparan & Detail Mekanis Jelas
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcbd5e1, 0.95);
+            hemiLight.position.set(0, 12, 0);
+            scene.add(hemiLight);
+
+            const keyLight = new THREE.DirectionalLight(0xffffff, 0.95);
+            keyLight.position.set(6, 11, 8);
+            scene.add(keyLight);
+
+            const rimLight = new THREE.DirectionalLight(0xe0f2fe, 0.55);
+            rimLight.position.set(-7, 7, -8);
+            scene.add(rimLight);
+
+            // Bangun Model 3D ECOBIN Lengkap
+            buildEcobin3DModel();
+
+            // Aktifkan Kontrol Orbit & Ketuk
+            setupPointerAndTouchControls(renderer.domElement);
+
+            window.addEventListener('resize', syncRendererSize);
+            window.addEventListener('orientationchange', () => {
+                setTimeout(syncRendererSize, 120);
+            });
+        }
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+
+            // Pastikan ukuran kanvas & aspek kamera selalu valid (> 0)
+            syncRendererSize();
+
+            // Interpolasi halus sudut motor servo & bukaan tutup
+            const diff = simState.targetAngleDeg - simState.currentAngleDeg;
+            if (Math.abs(diff) > 0.05) {
+                simState.currentAngleDeg += diff * 0.14;
+                updateMechanicalLinkage();
+
+                const roundedDeg = Math.round(simState.currentAngleDeg);
+                const readout = document.getElementById('servo-angle-readout');
+                const slider = document.getElementById('servo-slider');
+                if (readout) readout.textContent = roundedDeg + '°';
+                if (slider && Number(slider.value) !== roundedDeg) slider.value = roundedDeg;
+            }
+
+            updateCameraFromOrbit();
+
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        // Jalankan setelah halaman & Three.js siap sepenuhnya
+        function bootApplication() {
+            if (!window.THREE) {
+                setTimeout(bootApplication, 100);
+                return;
+            }
+            initThreeScene();
+            animateLoop();
+        }
+
+        window.onload = function () {
+            bootApplication();
+        };
+    </script>
+</body>
+</html>
